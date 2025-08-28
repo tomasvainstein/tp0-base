@@ -10,3 +10,8 @@ Parae ejecutar el script de bash se usa el comando:
 El script verifica que se proporcionen los 2 parámetros: archivo de salida y cantidad de clientes. Luego se mantiene la configuración del server y client que ya se encuentran en el archivo docker-compose-dev original (`container_name: server`, `image: server:latest` y `entrypoint: python3 /main.py`) y se hace un bucle para generar la cantidad de clientes especificada por parámetro (también se mantiene la estructura del archivo original para los clientes). Para la configuración de red se usan los valores `testing_net` y `172.25.125.0/24`.
 
 Para levantar los contenedores, se usa el comando `make docker-compose-up` finalmente y se pueden verificar que los clientes se comunican correctamente con el server verificando los logs con `make docker-compose-logs`. 
+
+## Ejercicio 2
+En este ejercicio se actualizó el script de bash `generar-compose.sh` creado en el ejercicio 1 para incluir automáticamente los volúmenes en cada servicio generado.
+
+De esta forma se modificó el cliente y el servidor para lograr que realizar cambios en los archivos de configuración no requiera reconstruir las imágenes de Docker. La configuración se inyecta en los contenedores a través de volumenes de Docker, permitiendo que los archivos persistan por fuera de la imagen y no sea necesario reiniciar o frenar la ejecución los contenedores para aplicar cambios de configuración.
