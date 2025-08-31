@@ -25,3 +25,18 @@ También, se usa `--rm` para eliminar automáticamente el contenedor después de
 
 
 Para ejecutar el script se usa el comando `./validar-echo-server.sh`.
+
+## Ejercicio 4
+En este ejercicio se modificó tanto el servidor en Python como el cliente en Go para implementar un cierre graceful al recibir la señal de SIGTERM, lo cual implica que todos los recursos como file descriptors, sockets y conexiones se cierren correctamente antes de que la aplicación termine su ejecución, evitando pérdida de datos y recursos perdidos.
+
+En el server:
+- Los logs registran todos los pasos del cierre
+- Se captura SIGTERM usando `signal.signal()`
+- Se usa el flag `_running` para controlar el bucle principal
+- El método `_cleanup()` cierra todos los recursos
+
+En el cliente:
+- Los logs registran todos los pasos del cierre
+- Captura SIGTERM en una goroutine separada
+- Se permite cancelar tanto en el bucle principal como en el sleep
+- Método `cleanup()` que cierra conexiones y cancela contexto
