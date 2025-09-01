@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/op/go-logging"
@@ -37,6 +39,11 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("loop", "period")
 	v.BindEnv("loop", "amount")
 	v.BindEnv("log", "level")
+    v.BindEnv("NOMBRE")
+	v.BindEnv("APELLIDO")
+	v.BindEnv("DOCUMENTO")
+	v.BindEnv("NACIMIENTO")
+	v.BindEnv("NUMERO")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -88,6 +95,14 @@ func PrintConfig(v *viper.Viper) {
 		v.GetDuration("loop.period"),
 		v.GetString("log.level"),
 	)
+	
+	log.Infof("action: loteria_config | result: success | nombre: %s | apellido: %s | documento: %s | nacimiento: %s | numero: %s",
+		v.GetString("NOMBRE"),
+		v.GetString("APELLIDO"),
+		v.GetString("DOCUMENTO"),
+		v.GetString("NACIMIENTO"),
+		v.GetString("NUMERO"),
+	)
 }
 
 func main() {
@@ -108,8 +123,24 @@ func main() {
 		ID:            v.GetString("id"),
 		LoopAmount:    v.GetInt("loop.amount"),
 		LoopPeriod:    v.GetDuration("loop.period"),
+		Nombre:        v.GetString("NOMBRE"),
+		Apellido:      v.GetString("APELLIDO"),
+		Documento:     v.GetString("DOCUMENTO"),
+		Nacimiento:    v.GetString("NACIMIENTO"),
+		Numero:        v.GetString("NUMERO"),
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop()
+	
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM)
+	
+	go func() {
+		client.StartClientLoop()
+	}()
+	
+	<-sigChan
+	log.Info("action: signal_received | result: success | signal: SIGTERM")
+	
+	client.Stop()
 }
