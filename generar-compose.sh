@@ -24,15 +24,7 @@ services:
       - testing_net
 YAML
 
-declare -a nombres=("Juan" "María" "Carlos" "Ana" "Luis")
-declare -a apellidos=("Gómez" "López" "Martínez" "Rodríguez" "García")
-declare -a documentos=("12345678" "23456789" "34567890" "45678901" "56789012")
-declare -a nacimientos=("1990-01-01" "1985-05-15" "1992-08-20" "1988-12-10" "1995-03-25")
-declare -a numeros=("1001" "2002" "3003" "4004" "5005")
-
 for i in $(seq 1 $cantidad_clientes); do
-    idx=$((i-1))
-
     cat >> "$archivo_salida" << YAML
 
   client$i:
@@ -42,11 +34,6 @@ for i in $(seq 1 $cantidad_clientes); do
     environment:
       - CLI_ID=$i
       - CLI_LOG_LEVEL=DEBUG
-      - NOMBRE=${nombres[$idx]}
-      - APELLIDO=${apellidos[$idx]}
-      - DOCUMENTO=${documentos[$idx]}
-      - NACIMIENTO=${nacimientos[$idx]}
-      - NUMERO=${numeros[$idx]}
     volumes:
       - ./client/config.yaml:/config.yaml
     networks:
