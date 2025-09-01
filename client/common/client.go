@@ -19,6 +19,11 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
+	Nombre        string
+	Apellido      string
+	Documento     string
+	Nacimiento    string
+	Numero        string
 }
 
 // Client Entity that encapsulates how
@@ -55,6 +60,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -88,6 +94,16 @@ func (c *Client) cleanup() {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
+	bet := NewBet(c.config.Nombre, c.config.Apellido, c.config.Documento, c.config.Nacimiento, c.config.Numero)
+	
+	if err := bet.Validate(); err != nil {
+		log.Errorf("action: bet_validation | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	
+	log.Infof("action: bet_created | result: success | client_id: %v | dni: %s | numero: %s", 
+		c.config.ID, bet.Documento, bet.Numero)
+	
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
@@ -99,30 +115,24 @@ func (c *Client) StartClientLoop() {
 		c.mu.Unlock()
 		
 		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
-
-		// TODO: Modify the send to avoid short-write
-		fmt.Fprintf(
-			c.conn,
-			"[CLIENT %v] Message N°%v\n",
-			c.config.ID,
-			msgID,
-		)
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		c.conn.Close()
-
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
+		if err := c.createClientSocket(); err != nil {
+			log.Errorf("action: connect | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			continue
 		}
 
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			c.config.ID,
-			msg,
-		)
+		err := c.sendBet(bet)
+		if err != nil {
+			log.Errorf("action: send_bet | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		}
+		
+		err = c.getAck()
+		if err != nil {
+			log.Errorf("action: receive_ack | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		} else {
+			log.Infof("action: apuesta_enviada | result: success | dni: %s | numero: %s", bet.Documento, bet.Numero)
+		}
+		
+		c.conn.Close()
 
 		// Wait a time between sending one message and the next one
 		select {
