@@ -1,4 +1,3 @@
-import signal
 import socket
 import logging
 from .communication_protocol import read_message, send_ack, parse_bet_payload, parse_bet_batch_payload, MSG_TYPE_BET
@@ -11,8 +10,6 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._running = True
-        
-        signal.signal(signal.SIGTERM, self._handle_sigterm)
 
     def run(self):
         """
@@ -30,23 +27,12 @@ class Server:
                 if client_sock:
                     self.__handle_client_connection(client_sock)
 
-            except OSError:
-                break
             except Exception as e:
                 if self._running:
-                    logging.error(f"action: accept_connections | result: fail | error: {e}")
+                    logging.error("action: accept_connections | result: fail | error: {e}")
                 break
         
         self._cleanup()
-
-    def _handle_sigterm(self, signum, frame):
-        logging.info("action: shutdown | result: in_progress")
-        self._running = False
-        try:
-            self._server_socket.close()
-        except:
-            pass
-        logging.info("action: shutdown | result: success")
 
     def stop(self):
         """Detiene el servidor de forma graceful"""
@@ -123,9 +109,7 @@ class Server:
         Function blocks until a connection to a client is made.
         Then connection created is printed and returned
         """
-        if not self._running:
-            return None
-            
+
         # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
