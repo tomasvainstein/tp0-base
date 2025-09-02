@@ -1,6 +1,6 @@
 import socket
 import logging
-from .communication_protocol import read_message, send_ack, parse_bet_payload, MSG_TYPE_BET
+from .communication_protocol import read_message, send_ack, parse_bet_payload, parse_bet_batch_payload, MSG_TYPE_BET
 from .utils import store_bets
 
 class Server:
@@ -70,25 +70,32 @@ class Server:
                 logging.error(f"action: receive_message | result: fail | error: unexpected message type {msg_type}")
                 return
             
-            # parsear la apuesta
-            bet = parse_bet_payload(payload)
-            if bet is None:
-                logging.error("action: receive_message | result: fail | error: could not parse bet")
+            bets = parse_bet_batch_payload(payload)
+            if bets is None:
+                bet = parse_bet_payload(payload)
+                if bet is None:
+                    logging.error("action: receive_message | result: fail | error: could not parse bet or batch")
+                    send_ack(client_sock, success=False, error_msg="Invalid payload format")
+                    return
+                bets = [bet]
+            
+            bet_count = len(bets)
+            logging.info(f'action: receive_message | result: success | ip: {client_sock.getpeername()[0]} | cantidad: {bet_count}')
+            
+            try:
+                store_bets(bets)
+                logging.info(f'action: apuesta_recibida | result: success | cantidad: {bet_count}')
+                
+                if not send_ack(client_sock, success=True):
+                    logging.error("action: send_ack | result: fail | error: could not send ACK")
+                    return
+                
+                logging.info("action: send_ack | result: success")
+                
+            except Exception as e:
+                logging.error(f'action: apuesta_recibida | result: fail | cantidad: {bet_count} | error: {e}')
+                send_ack(client_sock, success=False, error_msg=f"Failed to store bets: {e}")
                 return
-            
-            logging.info(f'action: receive_message | result: success | ip: {client_sock.getpeername()[0]} | dni: {bet.document} | numero: {bet.number}')
-            
-            # guarda la apuesta
-            store_bets([bet])
-            
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
-            
-            # enviar ACK al cliente
-            if not send_ack(client_sock):
-                logging.error("action: send_ack | result: fail | error: could not send ACK")
-                return
-            
-            logging.info("action: send_ack | result: success")
             
         except OSError as e:
             logging.error("action: handle_connection | result: fail | error: {e}")

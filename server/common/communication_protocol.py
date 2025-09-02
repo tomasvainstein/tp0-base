@@ -50,8 +50,12 @@ def read_message(conn) -> Optional[Tuple[int, bytes]]:
     
     return msg_type, payload
 
-def send_ack(conn) -> bool:
-    payload = b"OK"
+def send_ack(conn, success: bool = True, error_msg: str = "") -> bool:
+    if success:
+        payload = b"OK"
+    else:
+        payload = f"ERROR: {error_msg}".encode('utf-8')
+    
     msg_type = MSG_TYPE_ACK
     msg_length = len(payload)
     
@@ -88,4 +92,47 @@ def parse_bet_payload(payload: bytes) -> Optional[Bet]:
         
     except Exception as e:
         log.error("Error parsing bet payload: {e}")
+        return None
+
+def parse_bet_batch_payload(payload: bytes) -> Optional[list]:
+    try:
+        payload_str = payload.decode('utf-8')
+        lines = payload_str.strip().split('\n')
+        
+        if len(lines) < 2:
+            log.error("Invalid batch payload: expected at least 2 lines")
+            return None
+        
+        try:
+            expected_count = int(lines[0])
+        except ValueError:
+            log.error("Invalid batch payload: first line must be a number")
+            return None
+        
+        if len(lines) - 1 != expected_count:
+            log.error(f"Invalid batch payload: expected {expected_count} bets, got {len(lines) - 1}")
+            return None
+        
+        bets = []
+        for i, line in enumerate(lines[1:], 1):
+            fields = line.split('|')
+            if len(fields) != 5:
+                log.error(f"Invalid bet format at line {i}: expected 5 fields, got {len(fields)}")
+                return None
+            
+            nombre, apellido, documento, nacimiento, numero = fields
+            bet = Bet(
+                agency="1",
+                first_name=nombre,
+                last_name=apellido,
+                document=documento,
+                birthdate=nacimiento,
+                number=numero
+            )
+            bets.append(bet)
+        
+        return bets
+        
+    except Exception as e:
+        log.error(f"Error parsing batch payload: {e}")
         return None
