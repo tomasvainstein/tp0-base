@@ -95,7 +95,9 @@ func PrintConfig(v *viper.Viper) {
 		v.GetDuration("loop.period"),
 		v.GetString("log.level"),
 	)
-	
+
+	log.Infof("action: batch_config | result: success | max_amount: %d | csv_file: %s", v.GetInt("batch.maxAmount"), v.GetString("csv.filePath"))
+
 	log.Infof("action: loteria_config | result: success | nombre: %s | apellido: %s | documento: %s | nacimiento: %s | numero: %s",
 		v.GetString("NOMBRE"),
 		v.GetString("APELLIDO"),
@@ -119,15 +121,17 @@ func main() {
 	PrintConfig(v)
 
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		LoopAmount:    v.GetInt("loop.amount"),
-		LoopPeriod:    v.GetDuration("loop.period"),
-		Nombre:        v.GetString("NOMBRE"),
-		Apellido:      v.GetString("APELLIDO"),
-		Documento:     v.GetString("DOCUMENTO"),
-		Nacimiento:    v.GetString("NACIMIENTO"),
-		Numero:        v.GetString("NUMERO"),
+		ServerAddress:  v.GetString("server.address"),
+		ID:             v.GetString("id"),
+		LoopAmount:     v.GetInt("loop.amount"),
+		LoopPeriod:     v.GetDuration("loop.period"),
+		BatchMaxAmount: v.GetInt("batch.maxAmount"),
+		CSVFilePath:    v.GetString("csv.filePath"),
+		Nombre:         v.GetString("NOMBRE"),
+		Apellido:       v.GetString("APELLIDO"),
+		Documento:      v.GetString("DOCUMENTO"),
+		Nacimiento:     v.GetString("NACIMIENTO"),
+		Numero:         v.GetString("NUMERO"),
 	}
 
 	client := common.NewClient(clientConfig)
