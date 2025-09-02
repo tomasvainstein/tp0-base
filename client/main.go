@@ -39,6 +39,7 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("loop", "period")
 	v.BindEnv("loop", "amount")
 	v.BindEnv("log", "level")
+	v.BindEnv("csv", "filePath")
     v.BindEnv("NOMBRE")
 	v.BindEnv("APELLIDO")
 	v.BindEnv("DOCUMENTO")
@@ -95,9 +96,9 @@ func PrintConfig(v *viper.Viper) {
 		v.GetDuration("loop.period"),
 		v.GetString("log.level"),
 	)
-
+	
 	log.Infof("action: batch_config | result: success | max_amount: %d | csv_file: %s", v.GetInt("batch.maxAmount"), v.GetString("csv.filePath"))
-
+	
 	log.Infof("action: loteria_config | result: success | nombre: %s | apellido: %s | documento: %s | nacimiento: %s | numero: %s",
 		v.GetString("NOMBRE"),
 		v.GetString("APELLIDO"),

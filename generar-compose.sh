@@ -34,6 +34,7 @@ for i in $(seq 1 $cantidad_clientes); do
     environment:
       - CLI_ID=$i
       - CLI_LOG_LEVEL=DEBUG
+      - CLI_CSV_FILEPATH=/data/agency-$i.csv
       - CLI_NOMBRE=Tomas
       - CLI_APELLIDO=Vainstein
       - CLI_DOCUMENTO=00000000
