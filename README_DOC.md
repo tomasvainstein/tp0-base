@@ -43,3 +43,27 @@ El protocolo de comunicación utiliza un formato de mensaje con:
    nombre|apellido|documento|nacimiento|numero
    ```
    Ejemplo: `Tomas|Vainstein|00000000|2002-03-03|0000`
+
+
+## Ejercicio 6
+En este ejercicio se implementó el procesamiento por batches para el sistema de apuestas, permitiendo que se envíen múltiples apuestas en una sola comunicación con el servidor.
+
+
+Donde cada apuesta mantiene el formato csv en pipe-separated: `nombre|apellido|documento|nacimiento|numero`
+
+
+### Ejemplo:
+```
+3
+Juan|Pérez|12345678|1990-01-01|1234
+María|García|87654321|1985-05-15|5678
+Carlos|López|11223344|1992-12-25|9012
+```
+
+Se agregó la función `sendBetBatch` que permite enviar múltiples apuestas en un solo mensaje. La lectura de apuestas desde archivos CSV procesa cada línea de manera incremental y valida que cada apuesta cumpla con los campos requeridos. Una vez cargadas todas las apuestas en memoria, se divide el conjunto en lotes según el parámetro `BatchMaxAmount` definido en el config del cliente, permitiendo ajustar el tamaño de cada envío.
+
+Del lado del servidor, se implementó la función `parse_bet_batch_payload` para deserializar los lotes de apuestas recibidos y procesarlos de forma agrupada. Además, `send_ack` envía una confirmación de éxito o un mensaje de error detallando lo que se hizo con el mensaje despues de procesar cada batch.
+
+La configuración del tamaño de los lotes se define en config bajo la clave batch.maxAmount, con un valor por defecto de 160 apuestas por lote. Este umbral se calculó para ajustar un límite aproximado de 8 kB por mensaje, asumiendo un tamaño medio de 50 bytes por apuesta.
+
+El protocolo de comunicación sigue estos pasos: primero el cliente carga y valida los datos CSV, luego crea los lotes y los envía en conexiones TCP separadas. Tras cada envío, espera el ACK del servidor antes de continuar con el siguiente lote. En sentido contrario, el servidor recibe el batch, valida la estructura, persiste las apuestas usando `store_bets()`, y finalmente envía la confirmación de éxito o un reporte de error, logeando el mismo por consola también.
