@@ -35,11 +35,6 @@ for i in $(seq 1 $cantidad_clientes); do
       - CLI_ID=$i
       - CLI_LOG_LEVEL=DEBUG
       - CLI_CSV_FILEPATH=/data/agency-$i.csv
-      - CLI_NOMBRE=Tomas
-      - CLI_APELLIDO=Vainstein
-      - CLI_DOCUMENTO=00000000
-      - CLI_NACIMIENTO=2002-03-03
-      - CLI_NUMERO=0000
     volumes:
       - ./client/config.yaml:/config.yaml
       - ./.data/agency-$i.csv:/data/agency-$i.csv
