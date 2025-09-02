@@ -1,5 +1,6 @@
 import socket
 import logging
+import time
 from .communication_protocol import read_message, send_ack, parse_bet_payload, parse_bet_batch_payload, MSG_TYPE_BET
 from .utils import store_bets
 
@@ -10,6 +11,8 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._running = True
+        self._last_connection_time = time.time()
+        self._idle_timeout = 5.0
 
     def run(self):
         """
@@ -23,13 +26,27 @@ class Server:
         logging.info('action: accept_connections | result: in_progress')
         while self._running:
             try:
+                self._server_socket.settimeout(1.0)
+
                 client_sock = self.__accept_new_connection()
                 if client_sock:
+                    self._last_connection_time = time.time()
                     self.__handle_client_connection(client_sock)
+                else:
+                    current_time = time.time()
+                    if current_time - self._last_connection_time > self._idle_timeout:
+                        logging.info(f'action: idle_timeout | result: success | timeout: {self._idle_timeout}s')
+                        break
 
+            except socket.timeout:
+                current_time = time.time()
+                if current_time - self._last_connection_time > self._idle_timeout:
+                    logging.info(f'action: idle_timeout | result: success | timeout: {self._idle_timeout}s')
+                    break
+                continue
             except Exception as e:
                 if self._running:
-                    logging.error("action: accept_connections | result: fail | error: {e}")
+                    logging.error(f"action: accept_connections | result: fail | error: {e}")
                 break
         
         self._cleanup()
@@ -110,8 +127,12 @@ class Server:
         Then connection created is printed and returned
         """
 
-        # Connection arrived
-        logging.info('action: accept_connections | result: in_progress')
-        c, addr = self._server_socket.accept()
-        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
-        return c
+        try:
+            # Connection arrived
+            logging.info('action: accept_connections | result: in_progress')
+            c, addr = self._server_socket.accept()
+            logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+            return c
+        except socket.timeout:
+            # Timeout esperado, retornar None
+            return None
