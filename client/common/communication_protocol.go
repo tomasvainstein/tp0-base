@@ -77,6 +77,35 @@ func (c *Client) sendBet(bet *Bet) error {
 	return nil
 }
 
+func (c *Client) sendBetBatch(bets []*Bet) error {
+	if len(bets) == 0 {
+		return fmt.Errorf("cannot send empty batch")
+	}
+	
+	payload := fmt.Sprintf("%d\n", len(bets))
+	for _, bet := range bets {
+		betStr := fmt.Sprintf("%s|%s|%s|%s|%s\n",
+			bet.Nombre, bet.Apellido, bet.Documento, bet.Nacimiento, bet.Numero)
+		payload += betStr
+	}
+	
+	msg := NewMessage(MSG_TYPE_BET, []byte(payload))
+	
+	header := make([]byte, 5)
+	header[0] = msg.Type
+	binary.BigEndian.PutUint32(header[1:], msg.Length)
+	
+	if err := sendAll(c.conn, header); err != nil {
+		return fmt.Errorf("error sending header: %v", err)
+	}
+	
+	if err := sendAll(c.conn, msg.Payload); err != nil {
+		return fmt.Errorf("error sending payload: %v", err)
+	}
+	
+	return nil
+}
+
 func (c *Client) getAck() error {
 	header, err := readAll(c.conn, 5)
 	if err != nil {
@@ -95,8 +124,9 @@ func (c *Client) getAck() error {
 		return fmt.Errorf("error reading ACK payload: %v", err)
 	}
 	
-	if string(payload) != "OK" {
-		return fmt.Errorf("invalid ACK payload: expected 'OK', got '%s'", string(payload))
+	response := string(payload)
+	if response != "OK" {
+		return fmt.Errorf("server error: %s", response)
 	}
 	
 	return nil
