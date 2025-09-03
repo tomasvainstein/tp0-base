@@ -143,3 +143,30 @@ def parse_bet_batch_payload(payload: bytes) -> Optional[list]:
     except Exception as e:
         log.error(f"Error parsing batch payload: {e}")
         return None
+
+def send_winner_response(conn, winner_count: int) -> bool:
+
+    try:
+        payload = str(winner_count).encode('utf-8')
+        
+        msg_type = MSG_TYPE_WINNER_RESPONSE
+        msg_length = len(payload)
+        
+        header = bytearray(5)
+        header[0] = msg_type
+        header[1] = (msg_length >> 24) & 0xFF
+        header[2] = (msg_length >> 16) & 0xFF
+        header[3] = (msg_length >> 8) & 0xFF
+        header[4] = msg_length & 0xFF
+        
+        if not send_all(conn, bytes(header)):
+            return False
+        
+        if not send_all(conn, payload):
+            return False
+        
+        return True
+        
+    except Exception as e:
+        log.error(f"Error sending winner response: {e}")
+        return False
