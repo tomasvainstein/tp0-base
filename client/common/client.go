@@ -206,46 +206,34 @@ func (c *Client) StartClientLoop() {
 	}
 	
 	c.mu.Lock()
-	if c.running {
-		log.Infof("action: loop_finished | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
-		
-		if err := c.createClientSocket(); err != nil {
-			log.Errorf("action: connect_for_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		} else {
-			if err := c.sendFinishNotification(); err != nil {
-				log.Errorf("action: send_finish_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			} else {
-				log.Infof("action: finish_notification_sent | result: success | client_id: %v", c.config.ID)
-			}
-			
-			if err := c.getAck(); err != nil {
-				log.Errorf("action: receive_notification_ack | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			} else {
-				log.Infof("action: notification_ack_received | result: success | client_id: %v", c.config.ID)
-			}
-			
-			c.conn.Close()
+			if c.running {
+			log.Infof("action: loop_finished | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
 			
 			if err := c.createClientSocket(); err != nil {
-				log.Errorf("action: connect_for_winner_query | result: fail | client_id: %v | error: %v", c.config.ID, err)
+				log.Errorf("action: connect_for_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			} else {
-				if err := c.sendWinnerQuery(); err != nil {
-					log.Errorf("action: send_winner_query | result: fail | client_id: %v | error: %v", c.config.ID, err)
+				if err := c.sendFinishNotification(); err != nil {
+					log.Errorf("action: send_finish_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
 				} else {
-					log.Infof("action: winner_query_sent | result: success | client_id: %v", c.config.ID)
-					
-					winnerCount, err := c.getWinnerResponse()
-					if err != nil {
-						log.Errorf("action: receive_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)
-					} else {
-						log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnerCount)
-					}
+					log.Infof("action: finish_notification_sent | result: success | client_id: %v", c.config.ID)
+				}
+				
+				if err := c.getAck(); err != nil {
+					log.Errorf("action: receive_notification_ack | result: fail | client_id: %v | error: %v", c.config.ID, err)
+				} else {
+					log.Infof("action: notification_ack_received | result: success | client_id: %v", c.config.ID)
+				}
+				
+				winnerCount, err := c.getWinnerResponse()
+				if err != nil {
+					log.Errorf("action: receive_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)
+				} else {
+					log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnerCount)
 				}
 				
 				c.conn.Close()
 			}
-		}
-	} else {
+		} else {
 		log.Infof("action: loop_interrupted | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
 	}
 	c.mu.Unlock()

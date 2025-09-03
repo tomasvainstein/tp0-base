@@ -130,8 +130,7 @@ class Server:
             if expected_agencies > 0 and finished_agencies == expected_agencies and not self._sorteo_realizado:
                 logging.info('action: sorteo | result: success')
                 self._sorteo_realizado = True
-
-                self.__process_pending_queries()
+                self.__send_winners_to_all_agencies()
             
             if not send_ack(client_sock, success=True):
                 logging.error("action: send_ack | result: fail | error: could not send ACK")
@@ -143,12 +142,27 @@ class Server:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
             send_ack(client_sock, success=False, error_msg=f"Failed to process notification: {e}")
 
-    def __process_pending_queries(self):
-
-        logging.info(f'action: process_pending_queries | result: in_progress | pending_count: {len(self._pending_queries)}')
+    def __send_winners_to_all_agencies(self):
+        logging.info('action: send_winners_to_all_agencies | result: in_progress')
         
-        self._pending_queries.clear()
-        logging.info('action: process_pending_queries | result: success')
+        try:
+            all_bets = list(load_bets())
+            
+            winners_by_agency = {}
+            for bet in all_bets:
+                if has_won(bet):
+                    agency_id = str(bet.agency)
+                    if agency_id not in winners_by_agency:
+                        winners_by_agency[agency_id] = []
+                    winners_by_agency[agency_id].append(bet.document)
+            
+            for agency_id, winners in winners_by_agency.items():
+                logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {len(winners)}')
+            
+            logging.info('action: send_winners_to_all_agencies | result: success')
+            
+        except Exception as e:
+            logging.error(f'action: send_winners_to_all_agencies | result: fail | error: {e}')
 
     def __handle_winner_query(self, client_sock, payload):
 
@@ -157,7 +171,6 @@ class Server:
             
             if not self._sorteo_realizado:
                 logging.info(f'action: winner_query | result: in_progress | agency: {agency_id} | reason: sorteo not performed yet')
-                self._pending_queries.append(agency_id)
                 send_winner_response(client_sock, 0)
                 return
 
