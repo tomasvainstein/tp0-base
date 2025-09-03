@@ -1,7 +1,7 @@
 import socket
 import logging
 from .communication_protocol import read_message, send_ack, parse_bet_payload, parse_bet_batch_payload, MSG_TYPE_BET, MSG_TYPE_FINISH_NOTIFICATION, MSG_TYPE_WINNER_QUERY, MSG_TYPE_WINNER_RESPONSE, send_winner_response
-from .utils import store_bets, load_bets, has_won
+from .utils import store_bets, load_bets, has_won, LOTTERY_WINNER_NUMBER
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -12,6 +12,7 @@ class Server:
         self._running = True
         self._finished_agencies = set()
         self._sorteo_realizado = False
+        self._pending_queries = []
 
     def run(self):
         """
@@ -120,6 +121,8 @@ class Server:
             if len(self._finished_agencies) == 5 and not self._sorteo_realizado:
                 logging.info('action: sorteo | result: success')
                 self._sorteo_realizado = True
+
+                self.__process_pending_queries()
             
             if not send_ack(client_sock, success=True):
                 logging.error("action: send_ack | result: fail | error: could not send ACK")
@@ -131,19 +134,38 @@ class Server:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
             send_ack(client_sock, success=False, error_msg=f"Failed to process notification: {e}")
 
+    def __process_pending_queries(self):
+
+        logging.info(f'action: process_pending_queries | result: in_progress | pending_count: {len(self._pending_queries)}')
+        
+        for client_sock, agency_id in self._pending_queries:
+            try:
+                self.__process_winner_query(client_sock, agency_id)
+            except Exception as e:
+                logging.error(f'action: process_pending_query | result: fail | agency: {agency_id} | error: {e}')
+                send_winner_response(client_sock, 0)
+        
+        self._pending_queries.clear()
+        logging.info('action: process_pending_queries | result: success')
+
     def __handle_winner_query(self, client_sock, payload):
 
         try:
             agency_id = payload.decode('utf-8')
             
             if not self._sorteo_realizado:
-                logging.error(f'action: winner_query | result: fail | agency: {agency_id} | error: sorteo not performed yet')
-                if not send_winner_response(client_sock, 0):
-                    logging.error("action: send_winner_response | result: fail | error: could not send response")
-                    return
-                logging.info("action: send_winner_response | result: success")
+                logging.info(f'action: winner_query | result: pending | agency: {agency_id} | reason: sorteo not performed yet')
+                self._pending_queries.append((client_sock, agency_id))
                 return
             
+            self.__process_winner_query(client_sock, agency_id)
+            
+        except Exception as e:
+            logging.error(f'action: winner_query | result: fail | error: {e}')
+            send_winner_response(client_sock, 0)
+
+    def __process_winner_query(self, client_sock, agency_id):
+        try:
             try:
                 all_bets = list(load_bets())
                 agency_bets = [bet for bet in all_bets if str(bet.agency) == agency_id]
