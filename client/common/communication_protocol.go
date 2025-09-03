@@ -10,6 +10,9 @@ import (
 const (
 	MSG_TYPE_BET = 1
 	MSG_TYPE_ACK = 2
+	MSG_TYPE_FINISH_NOTIFICATION = 3
+	MSG_TYPE_WINNER_QUERY = 4
+	MSG_TYPE_WINNER_RESPONSE = 5
 )
 
 type Message struct {
@@ -130,4 +133,71 @@ func (c *Client) getAck() error {
 	}
 	
 	return nil
+}
+
+func (c *Client) sendFinishNotification() error {
+	payload := c.config.ID
+	
+	msg := NewMessage(MSG_TYPE_FINISH_NOTIFICATION, []byte(payload))
+	
+	header := make([]byte, 5)
+	header[0] = msg.Type
+	binary.BigEndian.PutUint32(header[1:], msg.Length)
+	
+	if err := sendAll(c.conn, header); err != nil {
+		return fmt.Errorf("error sending header: %v", err)
+	}
+	
+	if err := sendAll(c.conn, msg.Payload); err != nil {
+		return fmt.Errorf("error sending payload: %v", err)
+	}
+	
+	return nil
+}
+
+func (c *Client) sendWinnerQuery() error {
+	payload := c.config.ID
+	
+	msg := NewMessage(MSG_TYPE_WINNER_QUERY, []byte(payload))
+	
+	header := make([]byte, 5)
+	header[0] = msg.Type
+	binary.BigEndian.PutUint32(header[1:], msg.Length)
+	
+	if err := sendAll(c.conn, header); err != nil {
+		return fmt.Errorf("error sending header: %v", err)
+	}
+	
+	if err := sendAll(c.conn, msg.Payload); err != nil {
+		return fmt.Errorf("error sending payload: %v", err)
+	}
+	
+	return nil
+}
+
+func (c *Client) getWinnerResponse() (int, error) {
+	header, err := readAll(c.conn, 5)
+	if err != nil {
+		return 0, fmt.Errorf("error reading header: %v", err)
+	}
+	
+	msgType := header[0]
+	msgLength := binary.BigEndian.Uint32(header[1:])
+	
+	if msgType != MSG_TYPE_WINNER_RESPONSE {
+		return 0, fmt.Errorf("unexpected message type: expected %d, got %d", MSG_TYPE_WINNER_RESPONSE, msgType)
+	}
+	
+	payload, err := readAll(c.conn, msgLength)
+	if err != nil {
+		return 0, fmt.Errorf("error reading winner response payload: %v", err)
+	}
+	
+	response := string(payload)
+	var winnerCount int
+	if _, err := fmt.Sscanf(response, "%d", &winnerCount); err != nil {
+		return 0, fmt.Errorf("error parsing winner count: %v", err)
+	}
+	
+	return winnerCount, nil
 }

@@ -4,6 +4,9 @@ from .utils import Bet
 
 MSG_TYPE_BET = 1
 MSG_TYPE_ACK = 2
+MSG_TYPE_FINISH_NOTIFICATION = 3
+MSG_TYPE_WINNER_QUERY = 4
+MSG_TYPE_WINNER_RESPONSE = 5
 
 log = logging.getLogger(__name__)
 
