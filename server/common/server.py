@@ -144,7 +144,7 @@ class Server:
             except Exception as e:
                 logging.error(f'action: process_pending_query | result: fail | agency: {agency_id} | error: {e}')
                 send_winner_response(client_sock, 0)
-        
+
         self._pending_queries.clear()
         logging.info('action: process_pending_queries | result: success')
 
@@ -154,7 +154,7 @@ class Server:
             agency_id = payload.decode('utf-8')
             
             if not self._sorteo_realizado:
-                logging.info(f'action: winner_query | result: pending | agency: {agency_id} | reason: sorteo not performed yet')
+                logging.info(f'action: winner_query | result: in_progress | agency: {agency_id} | reason: sorteo not performed yet')
                 self._pending_queries.append((client_sock, agency_id))
                 return
             
