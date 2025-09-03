@@ -138,6 +138,9 @@ class Server:
             
             logging.info("action: send_ack | result: success")
             
+            if self._sorteo_realizado:
+                self.__process_winner_query(client_sock, agency_id)
+            
         except Exception as e:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
             send_ack(client_sock, success=False, error_msg=f"Failed to process notification: {e}")
@@ -147,7 +150,7 @@ class Server:
         
         try:
             all_bets = list(load_bets())
-            
+
             winners_by_agency = {}
             for bet in all_bets:
                 if has_won(bet):
@@ -155,7 +158,7 @@ class Server:
                     if agency_id not in winners_by_agency:
                         winners_by_agency[agency_id] = []
                     winners_by_agency[agency_id].append(bet.document)
-            
+
             for agency_id, winners in winners_by_agency.items():
                 logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {len(winners)}')
             
