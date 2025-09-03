@@ -12,8 +12,9 @@ class Server:
         self._running = True
         self._finished_agencies = set()
         self._sorteo_realizado = False
-        self._pending_queries = []  # Cola de consultas pendientes
-        self._agencies_with_bets = set()  # Agencias que han enviado apuestas
+        self._pending_queries = []
+        self._agencies_with_bets = set()
+        self._waiting_clients = {}
 
     def run(self):
         """
@@ -73,6 +74,7 @@ class Server:
                 self.__handle_bet_message(client_sock, payload)
             elif msg_type == MSG_TYPE_FINISH_NOTIFICATION:
                 self.__handle_finish_notification(client_sock, payload)
+                return
             elif msg_type == MSG_TYPE_WINNER_QUERY:
                 self.__handle_winner_query(client_sock, payload)
             else:
@@ -82,7 +84,8 @@ class Server:
         except OSError as e:
             logging.error(f"action: handle_connection | result: fail | error: {e}")
         finally:
-            client_sock.close()
+            if msg_type != MSG_TYPE_FINISH_NOTIFICATION:
+                client_sock.close()
 
     def __handle_bet_message(self, client_sock, payload):
         bets = parse_bet_batch_payload(payload)
@@ -121,16 +124,12 @@ class Server:
             logging.info(f'action: finish_notification | result: success | agency: {agency_id}')
             
             self._finished_agencies.add(agency_id)
+            self._waiting_clients[agency_id] = client_sock
 
             expected_agencies = len(self._agencies_with_bets)
             finished_agencies = len(self._finished_agencies)
             
             logging.info('action: sorteo_check | result: in_progress | expected: {expected_agencies} | finished: {finished_agencies}')
-            
-            if expected_agencies > 0 and finished_agencies == expected_agencies and not self._sorteo_realizado:
-                logging.info('action: sorteo | result: success')
-                self._sorteo_realizado = True
-                self.__send_winners_to_all_agencies()
             
             if not send_ack(client_sock, success=True):
                 logging.error("action: send_ack | result: fail | error: could not send ACK")
@@ -138,15 +137,17 @@ class Server:
             
             logging.info("action: send_ack | result: success")
             
-            if self._sorteo_realizado:
-                self.__process_winner_query(client_sock, agency_id)
+            if expected_agencies > 0 and finished_agencies == expected_agencies and not self._sorteo_realizado:
+                logging.info('action: sorteo | result: success')
+                self._sorteo_realizado = True
+                self.__send_winners_to_all_waiting_clients()
             
         except Exception as e:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
             send_ack(client_sock, success=False, error_msg=f"Failed to process notification: {e}")
 
-    def __send_winners_to_all_agencies(self):
-        logging.info('action: send_winners_to_all_agencies | result: in_progress')
+    def __send_winners_to_all_waiting_clients(self):
+        logging.info('action: send_winners_to_all_waiting_clients | result: in_progress')
         
         try:
             all_bets = list(load_bets())
@@ -159,13 +160,20 @@ class Server:
                         winners_by_agency[agency_id] = []
                     winners_by_agency[agency_id].append(bet.document)
 
-            for agency_id, winners in winners_by_agency.items():
-                logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {len(winners)}')
+            for agency_id, client_sock in self._waiting_clients.items():
+                winner_count = len(winners_by_agency.get(agency_id, []))
+                logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {winner_count}')
+                
+                if not send_winner_response(client_sock, winner_count):
+                    logging.error(f"action: send_winner_response | result: fail | error: could not send response to agency {agency_id}")
+                else:
+                    logging.info(f"action: send_winner_response | result: success | agency: {agency_id}")
             
-            logging.info('action: send_winners_to_all_agencies | result: success')
+            self._waiting_clients.clear()
+            logging.info('action: send_winners_to_all_waiting_clients | result: success')
             
         except Exception as e:
-            logging.error(f'action: send_winners_to_all_agencies | result: fail | error: {e}')
+            logging.error(f'action: send_winners_to_all_waiting_clients | result: fail | error: {e}')
 
     def __handle_winner_query(self, client_sock, payload):
 
