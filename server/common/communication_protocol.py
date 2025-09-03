@@ -79,15 +79,21 @@ def send_ack(conn, success: bool = True, error_msg: str = "") -> bool:
 def parse_bet_payload(payload: bytes) -> Optional[Bet]:
     try:
         payload_str = payload.decode('utf-8')
+        lines = payload_str.strip().split('\n')
         
-        fields = payload_str.split('|')
+        if len(lines) != 2:
+            log.error(f"Invalid bet payload format: expected 2 lines, got {len(lines)}")
+            return None
+        
+        agency_id = lines[0]
+        fields = lines[1].split('|')
         if len(fields) != 5:
             log.error(f"Invalid bet payload format: expected 5 fields, got {len(fields)}")
             return None
         
         nombre, apellido, documento, nacimiento, numero = fields
         bet = Bet(
-            agency="1",
+            agency=agency_id,
             first_name=nombre,
             last_name=apellido,
             document=documento,
@@ -106,22 +112,23 @@ def parse_bet_batch_payload(payload: bytes) -> Optional[list]:
         payload_str = payload.decode('utf-8')
         lines = payload_str.strip().split('\n')
         
-        if len(lines) < 2:
-            log.error("Invalid batch payload: expected at least 2 lines")
+        if len(lines) < 3:
+            log.error("Invalid batch payload: expected at least 3 lines")
             return None
         
+        agency_id = lines[0]
         try:
-            expected_count = int(lines[0])
+            expected_count = int(lines[1])
         except ValueError:
-            log.error("Invalid batch payload: first line must be a number")
+            log.error("Invalid batch payload: second line must be a number")
             return None
         
-        if len(lines) - 1 != expected_count:
-            log.error(f"Invalid batch payload: expected {expected_count} bets, got {len(lines) - 1}")
+        if len(lines) - 2 != expected_count:
+            log.error(f"Invalid batch payload: expected {expected_count} bets, got {len(lines) - 2}")
             return None
         
         bets = []
-        for i, line in enumerate(lines[1:], 1):
+        for i, line in enumerate(lines[2:], 2):
             fields = line.split('|')
             if len(fields) != 5:
                 log.error(f"Invalid bet format at line {i}: expected 5 fields, got {len(fields)}")
@@ -129,7 +136,7 @@ def parse_bet_batch_payload(payload: bytes) -> Optional[list]:
             
             nombre, apellido, documento, nacimiento, numero = fields
             bet = Bet(
-                agency="1",
+                agency=agency_id,
                 first_name=nombre,
                 last_name=apellido,
                 document=documento,

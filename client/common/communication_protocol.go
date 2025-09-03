@@ -60,8 +60,8 @@ func readAll(conn net.Conn, length uint32) ([]byte, error) {
 }
 
 func (c *Client) sendBet(bet *Bet) error {
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s",
-		bet.Nombre, bet.Apellido, bet.Documento, bet.Nacimiento, bet.Numero)
+	payload := fmt.Sprintf("%s\n%s|%s|%s|%s|%s",
+		c.config.ID, bet.Nombre, bet.Apellido, bet.Documento, bet.Nacimiento, bet.Numero)
 	
 	msg := NewMessage(MSG_TYPE_BET, []byte(payload))
 	
@@ -85,7 +85,7 @@ func (c *Client) sendBetBatch(bets []*Bet) error {
 		return fmt.Errorf("cannot send empty batch")
 	}
 	
-	payload := fmt.Sprintf("%d\n", len(bets))
+	payload := fmt.Sprintf("%s\n%d\n", c.config.ID, len(bets))
 	for _, bet := range bets {
 		betStr := fmt.Sprintf("%s|%s|%s|%s|%s\n",
 			bet.Nombre, bet.Apellido, bet.Documento, bet.Nacimiento, bet.Numero)
