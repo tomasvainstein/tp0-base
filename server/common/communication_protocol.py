@@ -1,4 +1,3 @@
-import struct
 import logging
 from typing import Tuple, Optional
 from .utils import Bet
@@ -42,7 +41,7 @@ def read_message(conn) -> Optional[Tuple[int, bytes]]:
         return None
     
     msg_type = header[0]
-    msg_length = struct.unpack('>I', header[1:])[0]
+    msg_length = (header[1] << 24) | (header[2] << 16) | (header[3] << 8) | header[4]
     
     payload = read_all(conn, msg_length)
     if payload is None:
@@ -59,9 +58,14 @@ def send_ack(conn, success: bool = True, error_msg: str = "") -> bool:
     msg_type = MSG_TYPE_ACK
     msg_length = len(payload)
     
-    header = struct.pack('>BI', msg_type, msg_length)
+    header = bytearray(5)
+    header[0] = msg_type
+    header[1] = (msg_length >> 24) & 0xFF
+    header[2] = (msg_length >> 16) & 0xFF
+    header[3] = (msg_length >> 8) & 0xFF
+    header[4] = msg_length & 0xFF
     
-    if not send_all(conn, header):
+    if not send_all(conn, bytes(header)):
         return False
     
     if not send_all(conn, payload):
