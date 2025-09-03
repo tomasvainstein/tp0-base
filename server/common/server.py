@@ -116,7 +116,7 @@ class Server:
             logging.info(f'action: finish_notification | result: success | agency: {agency_id}')
             
             self._finished_agencies.add(agency_id)
-            
+
             if len(self._finished_agencies) == 5 and not self._sorteo_realizado:
                 logging.info('action: sorteo | result: success')
                 self._sorteo_realizado = True
@@ -138,7 +138,10 @@ class Server:
             
             if not self._sorteo_realizado:
                 logging.error(f'action: winner_query | result: fail | agency: {agency_id} | error: sorteo not performed yet')
-                send_ack(client_sock, success=False, error_msg="Sorteo not performed yet")
+                if not send_winner_response(client_sock, 0):
+                    logging.error("action: send_winner_response | result: fail | error: could not send response")
+                    return
+                logging.info("action: send_winner_response | result: success")
                 return
             
             try:
@@ -160,7 +163,7 @@ class Server:
             
         except Exception as e:
             logging.error(f'action: winner_query | result: fail | error: {e}')
-            send_ack(client_sock, success=False, error_msg=f"Failed to process winner query: {e}")
+            send_winner_response(client_sock, 0)
 
     def __accept_new_connection(self):
         """
