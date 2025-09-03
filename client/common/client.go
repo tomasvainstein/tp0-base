@@ -239,10 +239,37 @@ func (c *Client) StartClientLoop() {
 						log.Errorf("action: receive_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)
 					} else {
 						log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnerCount)
+						
+						if winnerCount == 0 {
+							log.Infof("action: waiting_for_sorteo | result: in_progress | client_id: %v", c.config.ID)
+							time.Sleep(2 * time.Second)
+							c.conn.Close()
+							
+							if err := c.createClientSocket(); err != nil {
+								log.Errorf("action: connect_for_retry_winner_query | result: fail | client_id: %v | error: %v", c.config.ID, err)
+							} else {
+								if err := c.sendWinnerQuery(); err != nil {
+									log.Errorf("action: retry_winner_query | result: fail | client_id: %v | error: %v", c.config.ID, err)
+								} else {
+									log.Infof("action: retry_winner_query_sent | result: success | client_id: %v", c.config.ID)
+									
+									winnerCount, err := c.getWinnerResponse()
+									if err != nil {
+										log.Errorf("action: receive_retry_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)
+									} else {
+										log.Infof("action: consulta_ganadores_retry | result: success | cant_ganadores: %d", winnerCount)
+									}
+								}
+								
+								c.conn.Close()
+							}
+						}
 					}
 				}
 				
-				c.conn.Close()
+				if c.conn != nil {
+					c.conn.Close()
+				}
 			}
 		}
 	} else {
