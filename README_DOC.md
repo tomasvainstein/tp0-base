@@ -67,3 +67,37 @@ Del lado del servidor, se implementó la función `parse_bet_batch_payload` para
 La configuración del tamaño de los lotes se define en config bajo la clave batch.maxAmount, con un valor por defecto de 160 apuestas por lote. Este umbral se calculó para ajustar un límite aproximado de 8 kB por mensaje, asumiendo un tamaño medio de 50 bytes por apuesta.
 
 El protocolo de comunicación sigue estos pasos: primero el cliente carga y valida los datos CSV, luego crea los lotes y los envía en conexiones TCP separadas. Tras cada envío, espera el ACK del servidor antes de continuar con el siguiente lote. En sentido contrario, el servidor recibe el batch, valida la estructura, persiste las apuestas usando `store_bets()`, y finalmente envía la confirmación de éxito o un reporte de error, logeando el mismo por consola también.
+
+## Ejercicio 7
+En este ejercicio se implementó el sistema de loteria con sorteo y consulta de ganadores, donde los clientes notifican al servidor cuando terminan de enviar todas sus apuestas y el servidor realiza el sorteo solo cuando todas las agencias han finalizado.
+
+El flujo del sistema funciona así:
+
+- Envío de apuestas: Los clientes envían sus apuestas por lotes como en el ejercicio anterior, pero ahora cada apuesta incluye el id de la agencia en el payload.
+
+- Notificación de finalización: Una vez que cada cliente termina de enviar todas sus apuestas, envía una notificación de finalización al servidor indicando que ha completado su proceso.
+
+- Sorteo dinámico: El servidor mantiene un registro de todas las agencias que han enviado apuestas y espera a que todas notifiquen su finalización antes de realizar el sorteo.
+
+- Consulta de Ganadores: Después del sorteo, todos los clientes reciben automáticamente la cantidad de ganadores que tienen, sin necesidad de realizar consultas adicionales.
+
+Protocolo de comunicación:
+
+Se agregaron tres nuevos tipos de mensaje al protocolo existente:
+
+- `MSG_TYPE_FINISH_NOTIFICATION = 3`: Mensaje de notificación de finalización
+- `MSG_TYPE_WINNER_QUERY = 4`: Mensaje de consulta de ganadores  
+- `MSG_TYPE_WINNER_RESPONSE = 5`: Mensaje de respuesta con cantidad de ganadores
+
+Gestión de estado del servidor:
+
+El servidor mantiene tres estructuras de estado principales:
+
+- `_agencies_with_bets`: Conjunto de ids de agencias que han enviado al menos una apuesta
+- `_finished_agencies`: Conjunto de ids de agencias que han notificado finalización
+- `_waiting_clients`: Diccionario que mantiene las conexiones de clientes esperando recibir ganadores
+
+Sincronización y Sorteo:
+
+El sorteo se realiza únicamente cuando se cumple la condición: `len(_finished_agencies) == len(_agencies_with_bets)`. Esto se hace para que todas las agencias que participaron en el proceso hayan notificado su finalización antes de proceder con el sorteo.
+Una vez realizado el sorteo, el servidor calcula los ganadores por agencia y envía la información a todos los clientes que están esperando, manteniendo sus conexiones abiertas hasta recibir la respuesta.
