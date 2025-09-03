@@ -12,7 +12,8 @@ class Server:
         self._running = True
         self._finished_agencies = set()
         self._sorteo_realizado = False
-        self._pending_queries = []
+        self._pending_queries = []  # Cola de consultas pendientes
+        self._agencies_with_bets = set()  # Agencias que han enviado apuestas
 
     def run(self):
         """
@@ -93,6 +94,9 @@ class Server:
                 return
             bets = [bet]
         
+        for bet in bets:
+            self._agencies_with_bets.add(str(bet.agency))
+        
         bet_count = len(bets)
         logging.info(f'action: receive_message | result: success | ip: {client_sock.getpeername()[0]} | cantidad: {bet_count}')
         
@@ -118,7 +122,12 @@ class Server:
             
             self._finished_agencies.add(agency_id)
 
-            if len(self._finished_agencies) == 5 and not self._sorteo_realizado:
+            expected_agencies = len(self._agencies_with_bets)
+            finished_agencies = len(self._finished_agencies)
+            
+            logging.info('action: sorteo_check | result: in_progress | expected: {expected_agencies} | finished: {finished_agencies}')
+            
+            if expected_agencies > 0 and finished_agencies == expected_agencies and not self._sorteo_realizado:
                 logging.info('action: sorteo | result: success')
                 self._sorteo_realizado = True
 
@@ -157,7 +166,7 @@ class Server:
                 logging.info(f'action: winner_query | result: in_progress | agency: {agency_id} | reason: sorteo not performed yet')
                 self._pending_queries.append((client_sock, agency_id))
                 return
-            
+
             self.__process_winner_query(client_sock, agency_id)
             
         except Exception as e:
