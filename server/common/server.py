@@ -93,7 +93,7 @@ class Server:
                 send_ack(client_sock, success=False, error_msg="Invalid payload format")
                 return
             bets = [bet]
-        
+
         for bet in bets:
             self._agencies_with_bets.add(str(bet.agency))
         
@@ -147,13 +147,6 @@ class Server:
 
         logging.info(f'action: process_pending_queries | result: in_progress | pending_count: {len(self._pending_queries)}')
         
-        for client_sock, agency_id in self._pending_queries:
-            try:
-                self.__process_winner_query(client_sock, agency_id)
-            except Exception as e:
-                logging.error(f'action: process_pending_query | result: fail | agency: {agency_id} | error: {e}')
-                send_winner_response(client_sock, 0)
-
         self._pending_queries.clear()
         logging.info('action: process_pending_queries | result: success')
 
@@ -164,7 +157,8 @@ class Server:
             
             if not self._sorteo_realizado:
                 logging.info(f'action: winner_query | result: in_progress | agency: {agency_id} | reason: sorteo not performed yet')
-                self._pending_queries.append((client_sock, agency_id))
+                self._pending_queries.append(agency_id)
+                send_winner_response(client_sock, 0)
                 return
 
             self.__process_winner_query(client_sock, agency_id)
