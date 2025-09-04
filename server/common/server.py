@@ -1,5 +1,7 @@
 import socket
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from .communication_protocol import read_message, send_ack, parse_bet_payload, parse_bet_batch_payload, MSG_TYPE_BET, MSG_TYPE_FINISH_NOTIFICATION, MSG_TYPE_WINNER_QUERY, MSG_TYPE_WINNER_RESPONSE, send_winner_response
 from .utils import store_bets, load_bets, has_won, LOTTERY_WINNER_NUMBER
 
@@ -15,6 +17,8 @@ class Server:
         self._pending_queries = []
         self._agencies_with_bets = set()
         self._waiting_clients = {}
+        
+        self._thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="client_handler")
 
     def run(self):
         """
@@ -30,7 +34,7 @@ class Server:
             try:
                 client_sock = self.__accept_new_connection()
                 if client_sock:
-                    self.__handle_client_connection(client_sock)
+                    self._thread_pool.submit(self.__handle_client_connection, client_sock)
 
             except Exception as e:
                 if self._running:
@@ -47,6 +51,14 @@ class Server:
     def _cleanup(self):
         """Limpia todos los recursos del servidor"""
         logging.info("action: cleanup | result: in_progress")
+        
+        try:
+            if self._thread_pool:
+                logging.info("action: cleanup | result: in_progress | resource: thread_pool")
+                self._thread_pool.shutdown(wait=True)
+                logging.info("action: cleanup | result: success | resource: thread_pool")
+        except Exception as e:
+            logging.error("action: cleanup | result: fail | resource: thread_pool | error: {e}")
         
         try:
             if self._server_socket:
