@@ -1,12 +1,12 @@
 package common
 
 import (
-	"bufio"
 	"context"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -96,88 +96,81 @@ func (c *Client) cleanup() {
 	}
 }
 
-func (c *Client) readCSVBets() ([]*Bet, error) {
+func (c *Client) processCSVBets(processBatch func([]*Bet) error) error {
 	file, err := os.Open(c.config.CSVFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("error opening CSV file: %v", err)
+		return fmt.Errorf("error opening CSV file: %v", err)
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	var bets []*Bet
+	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = 5
+	
+	var currentBatch []*Bet
 	lineNumber := 0
+	totalBets := 0
 
-	for scanner.Scan() {
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Warningf("action: csv_validation | result: skip | line: %d | error: %v", lineNumber+1, err)
+			continue
+		}
+
 		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
 		
-		if line == "" {
+		if len(record) == 0 || (len(record) == 1 && record[0] == "") {
 			continue
 		}
 
-		fields := strings.Split(line, ",")
-		if len(fields) != 5 {
-			log.Warningf("action: csv_validation | result: skip | line: %d | error: invalid number of fields", lineNumber)
-			continue
-		}
-
-		bet := NewBet(fields[0], fields[1], fields[2], fields[3], fields[4])
+		bet := NewBet(record[0], record[1], record[2], record[3], record[4])
 		if err := bet.Validate(); err != nil {
 			log.Warningf("action: bet_validation | result: skip | line: %d | error: %v", lineNumber, err)
 			continue
 		}
 
-		bets = append(bets, bet)
-	}
+		currentBatch = append(currentBatch, bet)
+		totalBets++
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading CSV file: %v", err)
-	}
-
-	log.Infof("action: csv_loaded | result: success | total_bets: %d", len(bets))
-	return bets, nil
-}
-
-func (c *Client) createBatches(bets []*Bet) [][]*Bet {
-	var batches [][]*Bet
-	
-	for i := 0; i < len(bets); i += c.config.BatchMaxAmount {
-		end := i + c.config.BatchMaxAmount
-		if end > len(bets) {
-			end = len(bets)
+		if len(currentBatch) >= c.config.BatchMaxAmount {
+			if err := processBatch(currentBatch); err != nil {
+				return fmt.Errorf("error processing batch: %v", err)
+			}
+			currentBatch = nil
 		}
-		batches = append(batches, bets[i:end])
 	}
-	
-	log.Infof("action: batches_created | result: success | total_batches: %d | max_batch_size: %d", 
-		len(batches), c.config.BatchMaxAmount)
-	return batches
+
+	if len(currentBatch) > 0 {
+		if err := processBatch(currentBatch); err != nil {
+			return fmt.Errorf("error processing final batch: %v", err)
+		}
+	}
+
+	log.Infof("action: csv_processed | result: success | total_bets: %d", totalBets)
+	return nil
 }
 
 func (c *Client) StartClientLoop() {
-	bets, err := c.readCSVBets()
-	if err != nil {
-		log.Errorf("action: csv_loading | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return
-	}
-
-	batches := c.createBatches(bets)
-	
 	batchCount := 0
-	for batchCount < c.config.LoopAmount && batchCount < len(batches) {
+	
+	processBatch := func(batch []*Bet) error {
 		c.mu.Lock()
 		if !c.running {
 			c.mu.Unlock()
-			break
+			return fmt.Errorf("client stopped")
 		}
 		c.mu.Unlock()
 		
-		batch := batches[batchCount]
+		if batchCount >= c.config.LoopAmount {
+			return fmt.Errorf("reached maximum batch count")
+		}
 		
 		if err := c.createClientSocket(); err != nil {
 			log.Errorf("action: connect | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			batchCount++
-			continue
+			return err
 		}
 
 		err := c.sendBetBatch(batch)
@@ -201,8 +194,16 @@ func (c *Client) StartClientLoop() {
 		case <-time.After(c.config.LoopPeriod):
 		case <-c.ctx.Done():
 			log.Infof("action: loop_interrupted | result: success | client_id: %v", c.config.ID)
-			return
+			return fmt.Errorf("context cancelled")
 		}
+		
+		return nil
+	}
+	
+	err := c.processCSVBets(processBatch)
+	if err != nil {
+		log.Errorf("action: csv_processing | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
 	}
 	
 	c.mu.Lock()
