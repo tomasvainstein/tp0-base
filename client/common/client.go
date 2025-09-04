@@ -180,4 +180,6 @@ func (c *Client) StartClientLoop() {
 	}
 	
 	log.Infof("action: loop_finished | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
+	
+	os.Exit(0)
 }

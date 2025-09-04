@@ -140,10 +140,12 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM)
 	
-	go client.StartClientLoop()
+	go func() {
+		<-sigChan
+		log.Info("action: signal_received | result: success | signal: SIGTERM")
+		client.Cleanup()
+		os.Exit(0)
+	}()
 	
-	<-sigChan
-	log.Info("action: signal_received | result: success | signal: SIGTERM")
-	
-	client.Cleanup()
+	client.StartClientLoop()
 }
