@@ -141,11 +141,6 @@ class Server:
                 logging.info('action: sorteo | result: success')
                 self._sorteo_realizado = True
                 self.__send_winners_to_all_waiting_clients()
-            else:
-                if not send_winner_response(client_sock, 0):
-                    logging.error(f"action: send_winner_response | result: fail | error: could not send response to agency {agency_id}")
-                else:
-                    logging.info(f"action: send_winner_response | result: success | agency: {agency_id}")
             
         except Exception as e:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
