@@ -48,6 +48,13 @@ class Server:
         """Detiene el servidor de forma graceful"""
         logging.info("action: stop | result: in_progress")
         self._running = False
+        
+        try:
+            if self._server_socket:
+                self._server_socket.close()
+                logging.info("action: stop | result: success | resource: server_socket_closed")
+        except Exception as e:
+            logging.error(f"action: stop | result: fail | resource: server_socket | error: {e}")
 
     def _cleanup(self):
         """Limpia todos los recursos del servidor"""
@@ -56,13 +63,13 @@ class Server:
         try:
             if self._thread_pool:
                 logging.info("action: cleanup | result: in_progress | resource: thread_pool")
-                self._thread_pool.shutdown(wait=True)
+                self._thread_pool.shutdown(wait=True, timeout=10)
                 logging.info("action: cleanup | result: success | resource: thread_pool")
         except Exception as e:
             logging.error("action: cleanup | result: fail | resource: thread_pool | error: {e}")
         
         try:
-            if self._server_socket:
+            if hasattr(self, '_server_socket') and self._server_socket:
                 self._server_socket.close()
                 logging.info("action: cleanup | result: success | resource: server_socket")
         except Exception as e:
@@ -74,6 +81,11 @@ class Server:
         """
         Maneja la conexión con el cliente usando el protocolo de lotería
         """
+        if not self._running:
+            logging.info("action: handle_connection | result: cancelled | reason: server_stopping")
+            client_sock.close()
+            return
+            
         try:
             # leer mensaje del cliente
             message = read_message(client_sock)
@@ -203,7 +215,7 @@ class Server:
 
         try:
             agency_id = payload.decode('utf-8')
-            
+
             with self._lock:
                 sorteo_realizado = self._sorteo_realizado
             
