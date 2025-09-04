@@ -144,7 +144,6 @@ func main() {
 		<-sigChan
 		log.Info("action: signal_received | result: success | signal: SIGTERM")
 		client.Cleanup()
-		os.Exit(0)
 	}()
 	
 	client.StartClientLoop()
