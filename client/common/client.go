@@ -110,10 +110,6 @@ func (c *Client) processCSVBets(processBatch func([]*Bet) error) error {
 
 		if len(currentBatch) >= c.config.BatchMaxAmount {
 			if err := processBatch(currentBatch); err != nil {
-				if err.Error() == "reached maximum batch count" {
-					log.Infof("action: batch_limit_reached | result: success | total_bets_processed: %d", totalBets)
-					return nil
-				}
 				return fmt.Errorf("error processing batch: %v", err)
 			}
 			currentBatch = nil
@@ -122,10 +118,6 @@ func (c *Client) processCSVBets(processBatch func([]*Bet) error) error {
 
 	if len(currentBatch) > 0 {
 		if err := processBatch(currentBatch); err != nil {
-			if err.Error() == "reached maximum batch count" {
-				log.Infof("action: batch_limit_reached | result: success | total_bets_processed: %d", totalBets)
-				return nil
-			}
 			return fmt.Errorf("error processing final batch: %v", err)
 		}
 	}
@@ -150,8 +142,6 @@ func (c *Client) StartClientLoop() {
 		err := c.sendBetBatch(batch)
 		if err != nil {
 			log.Errorf("action: send_batch | result: fail | client_id: %v | batch_size: %d | error: %v", c.config.ID, len(batch), err)
-			c.conn.Close()
-			return err
 		} else {
 			log.Infof("action: batch_sent | result: success | client_id: %v | batch_size: %d", c.config.ID, len(batch))
 		}
@@ -159,8 +149,6 @@ func (c *Client) StartClientLoop() {
 		err = c.getAck()
 		if err != nil {
 			log.Errorf("action: receive_ack | result: fail | client_id: %v | batch_size: %d | error: %v", c.config.ID, len(batch), err)
-			c.conn.Close()
-			return err
 		} else {
 			log.Infof("action: apuesta_enviada | result: success | client_id: %v | batch_size: %d", c.config.ID, len(batch))
 		}
