@@ -196,4 +196,6 @@ func (c *Client) StartClientLoop() {
 		
 		c.conn.Close()
 	}
+	
+	os.Exit(0)
 }
