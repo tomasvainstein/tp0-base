@@ -60,14 +60,13 @@ María|García|87654321|1985-05-15|5678
 Carlos|López|11223344|1992-12-25|9012
 ```
 
-Se agregó la función `sendBetBatch` que permite enviar múltiples apuestas en un solo mensaje. La lectura de apuestas desde archivos CSV procesa cada línea de manera incremental y valida que cada apuesta cumpla con los campos requeridos. Una vez cargadas todas las apuestas en memoria, se divide el conjunto en lotes según el parámetro `BatchMaxAmount` definido en el config del cliente, permitiendo ajustar el tamaño de cada envío.
+Se agregó la función `sendBetBatch` que permite enviar múltiples apuestas en un solo mensaje. La lectura de apuestas desde archivos CSV se realiza de manera streaming utilizando `encoding/csv`, procesando cada línea incrementalmente sin cargar todo el archivo en memoria. Cada apuesta se valida individualmente y se agrupa en lotes según el parámetro `BatchMaxAmount` definido en el config del cliente, permitiendo ajustar el tamaño de cada envío.
 
 Del lado del servidor, se implementó la función `parse_bet_batch_payload` para deserializar los lotes de apuestas recibidos y procesarlos de forma agrupada. Además, `send_ack` envía una confirmación de éxito o un mensaje de error detallando lo que se hizo con el mensaje despues de procesar cada batch.
 
 La configuración del tamaño de los lotes se define en config bajo la clave batch.maxAmount, con un valor por defecto de 160 apuestas por lote. Este umbral se calculó para ajustar un límite aproximado de 8 kB por mensaje, asumiendo un tamaño medio de 50 bytes por apuesta.
 
-El protocolo de comunicación sigue estos pasos: primero el cliente carga y valida los datos CSV, luego crea los lotes y los envía en conexiones TCP separadas. Tras cada envío, espera el ACK del servidor antes de continuar con el siguiente lote. En sentido contrario, el servidor recibe el batch, valida la estructura, persiste las apuestas usando `store_bets()`, y finalmente envía la confirmación de éxito o un reporte de error, logeando el mismo por consola también.
-
+El protocolo de comunicación sigue estos pasos: primero el cliente procesa el archivo csv, validando cada apuesta individualmente y agrupándolas en lotes de tamaño configurable. Los lotes se envían en conexiones TCP separadas tan pronto como se completan. Tras cada envío, espera el ACK del servidor antes de continuar con el siguiente lote. En sentido contrario, el servidor recibe el batch, valida la estructura, persiste las apuestas usando `store_bets()`, y finalmente envía la confirmación de éxito o un reporte de error, logeando el mismo por consola también.
 ## Ejercicio 7
 En este ejercicio se implementó el sistema de loteria con sorteo y consulta de ganadores, donde los clientes notifican al servidor cuando terminan de enviar todas sus apuestas y el servidor realiza el sorteo solo cuando todas las agencias han finalizado.
 
