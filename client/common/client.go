@@ -156,6 +156,8 @@ func (c *Client) StartClientLoop() {
 		c.conn.Close()
 		batchCount++
 
+		time.Sleep(c.config.LoopPeriod)
+		
 		return nil
 	}
 	
