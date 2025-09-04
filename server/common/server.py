@@ -19,6 +19,7 @@ class Server:
         self._waiting_clients = {}
         
         self._thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="client_handler")
+        self._lock = threading.Lock()
 
     def run(self):
         """
@@ -109,8 +110,9 @@ class Server:
                 return
             bets = [bet]
 
-        for bet in bets:
-            self._agencies_with_bets.add(str(bet.agency))
+        with self._lock:
+            for bet in bets:
+                self._agencies_with_bets.add(str(bet.agency))
         
         bet_count = len(bets)
         logging.info(f'action: receive_message | result: success | ip: {client_sock.getpeername()[0]} | cantidad: {bet_count}')
@@ -135,13 +137,21 @@ class Server:
             agency_id = payload.decode('utf-8')
             logging.info(f'action: finish_notification | result: success | agency: {agency_id}')
             
-            self._finished_agencies.add(agency_id)
-            self._waiting_clients[agency_id] = client_sock
+            with self._lock:
+                self._finished_agencies.add(agency_id)
+                self._waiting_clients[agency_id] = client_sock
 
-            expected_agencies = len(self._agencies_with_bets)
-            finished_agencies = len(self._finished_agencies)
-            
-            logging.info('action: sorteo_check | result: in_progress | expected: {expected_agencies} | finished: {finished_agencies}')
+                expected_agencies = len(self._agencies_with_bets)
+                finished_agencies = len(self._finished_agencies)
+                
+                logging.info('action: sorteo_check | result: in_progress | expected: {expected_agencies} | finished: {finished_agencies}')
+                
+                should_perform_sorteo = (expected_agencies > 0 and
+                                       finished_agencies == expected_agencies and 
+                                       not self._sorteo_realizado)
+                
+                if should_perform_sorteo:
+                    self._sorteo_realizado = True
             
             if not send_ack(client_sock, success=True):
                 logging.error("action: send_ack | result: fail | error: could not send ACK")
@@ -149,9 +159,8 @@ class Server:
             
             logging.info("action: send_ack | result: success")
             
-            if expected_agencies > 0 and finished_agencies == expected_agencies and not self._sorteo_realizado:
+            if should_perform_sorteo:
                 logging.info('action: sorteo | result: success')
-                self._sorteo_realizado = True
                 self.__send_winners_to_all_waiting_clients()
             
         except Exception as e:
@@ -172,7 +181,11 @@ class Server:
                         winners_by_agency[agency_id] = []
                     winners_by_agency[agency_id].append(bet.document)
 
-            for agency_id, client_sock in self._waiting_clients.items():
+            with self._lock:
+                waiting_clients_copy = self._waiting_clients.copy()
+                self._waiting_clients.clear()
+
+            for agency_id, client_sock in waiting_clients_copy.items():
                 winner_count = len(winners_by_agency.get(agency_id, []))
                 logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {winner_count}')
                 
@@ -181,7 +194,6 @@ class Server:
                 else:
                     logging.info(f"action: send_winner_response | result: success | agency: {agency_id}")
             
-            self._waiting_clients.clear()
             logging.info('action: send_winners_to_all_waiting_clients | result: success')
             
         except Exception as e:
@@ -192,7 +204,10 @@ class Server:
         try:
             agency_id = payload.decode('utf-8')
             
-            if not self._sorteo_realizado:
+            with self._lock:
+                sorteo_realizado = self._sorteo_realizado
+            
+            if not sorteo_realizado:
                 logging.info(f'action: winner_query | result: in_progress | agency: {agency_id} | reason: sorteo not performed yet')
                 send_winner_response(client_sock, 0)
                 return
