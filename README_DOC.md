@@ -101,3 +101,28 @@ Sincronización y Sorteo:
 
 El sorteo se realiza únicamente cuando se cumple la condición: `len(_finished_agencies) == len(_agencies_with_bets)`. Esto se hace para que todas las agencias que participaron en el proceso hayan notificado su finalización antes de proceder con el sorteo.
 Una vez realizado el sorteo, el servidor calcula los ganadores por agencia y envía la información a todos los clientes que están esperando, manteniendo sus conexiones abiertas hasta recibir la respuesta.
+
+## Ejercicio 8
+En este ejercicio se implementó concurrencia en el servidor para permitir el procesamiento paralelo de múltiples conexiones de clientes, para agilizar el rendimiento del sistema de lotería.
+
+En la implementación se reemplazó el procesamiento secuencial de conexiones por un sistema de concurrencia basado en ThreadPoolExecutor.
+
+- Thread Pool: Se configuró un pool de 10 threads para procesar conexiones concurrentemente
+- Aceptación de conexiones: El hilo principal del servidor se encarga únicamente de aceptar nuevas conexiones y enviarlas al thread pool
+- Procesamiento paralelo: Cada conexión de cliente se procesa en un thread independiente, permitiendo múltiples operaciones simultáneas
+
+También se implementó sincronización para proteger las variables compartidas del servidor contra race conditions:
+
+- Lock principal: Se agregó un `threading.Lock()` para proteger todas las operaciones críticas
+- Variables protegidas:
+  - `_agencies_with_bets`:Representa al conjunto de agencias que han enviado apuestas
+  - `_finished_agencies`: Representa al conjunto de agencias que han notificado su finalización
+  - `_sorteo_realizado`: Este flag indica si el sorteo ya fue realizado
+  - `_waiting_clients`: Diccionario de clientes esperando resultados
+
+Las siguientes operaciones se protegieron con locks para garantizar consistencia:
+
+- Modificación de agencias: Al procesar apuestas, se actualiza `_agencies_with_bets` de forma atómica
+- Notificación de finalización: Se verifica y actualiza el estado del sorteo de forma thread safe
+- Consulta de ganadores: Se verifica el estado del sorteo antes de procesar consultas
+- Envío de resultados: Se obtiene una copia de los clientes esperando para evitar modificaciones concurrentes
