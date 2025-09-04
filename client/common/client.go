@@ -110,6 +110,10 @@ func (c *Client) processCSVBets(processBatch func([]*Bet) error) error {
 
 		if len(currentBatch) >= c.config.BatchMaxAmount {
 			if err := processBatch(currentBatch); err != nil {
+				if err.Error() == "reached maximum batch count" {
+					log.Infof("action: batch_limit_reached | result: success | total_bets_processed: %d", totalBets)
+					return nil
+				}
 				return fmt.Errorf("error processing batch: %v", err)
 			}
 			currentBatch = nil
@@ -118,6 +122,10 @@ func (c *Client) processCSVBets(processBatch func([]*Bet) error) error {
 
 	if len(currentBatch) > 0 {
 		if err := processBatch(currentBatch); err != nil {
+			if err.Error() == "reached maximum batch count" {
+				log.Infof("action: batch_limit_reached | result: success | total_bets_processed: %d", totalBets)
+				return nil
+			}
 			return fmt.Errorf("error processing final batch: %v", err)
 		}
 	}
@@ -184,6 +192,12 @@ func (c *Client) StartClientLoop() {
 			log.Errorf("action: receive_notification_ack | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		} else {
 			log.Infof("action: notification_ack_received | result: success | client_id: %v", c.config.ID)
+		}
+		
+		if err := c.sendWinnerQuery(); err != nil {
+			log.Errorf("action: send_winner_query | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		} else {
+			log.Infof("action: winner_query_sent | result: success | client_id: %v", c.config.ID)
 		}
 		
 		winnerCount, err := c.getWinnerResponse()
