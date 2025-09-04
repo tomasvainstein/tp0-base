@@ -1,13 +1,11 @@
 package common
 
 import (
-	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/op/go-logging"
@@ -34,21 +32,13 @@ type ClientConfig struct {
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
-	mu     sync.Mutex
-	running bool
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
 func NewClient(config ClientConfig) *Client {
-	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{
 		config: config,
-		running: true,
-		ctx:    ctx,
-		cancel: cancel,
 	}
 	return client
 }
@@ -70,26 +60,9 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) Stop() {
-	log.Info("action: graceful_shutdown | result: in_progress")
-	
-	c.mu.Lock()
-	c.running = false
-	c.mu.Unlock()
-	
-	c.cancel()
-	
-	c.cleanup()
-	
-	log.Info("action: graceful_shutdown | result: success")
-}
-
-func (c *Client) cleanup() {
+func (c *Client) Cleanup() {
 	log.Info("action: cleanup | result: in_progress")
-	
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	
+
 	if c.conn != nil {
 		c.conn.Close()
 		log.Info("action: cleanup | result: success | resource: client_connection")
@@ -157,13 +130,6 @@ func (c *Client) StartClientLoop() {
 	batchCount := 0
 	
 	processBatch := func(batch []*Bet) error {
-		c.mu.Lock()
-		if !c.running {
-			c.mu.Unlock()
-			return fmt.Errorf("client stopped")
-		}
-		c.mu.Unlock()
-		
 		if batchCount >= c.config.LoopAmount {
 			return fmt.Errorf("reached maximum batch count")
 		}
@@ -176,6 +142,8 @@ func (c *Client) StartClientLoop() {
 		err := c.sendBetBatch(batch)
 		if err != nil {
 			log.Errorf("action: send_batch | result: fail | client_id: %v | batch_size: %d | error: %v", c.config.ID, len(batch), err)
+			c.conn.Close()
+			return err
 		} else {
 			log.Infof("action: batch_sent | result: success | client_id: %v | batch_size: %d", c.config.ID, len(batch))
 		}
@@ -183,6 +151,8 @@ func (c *Client) StartClientLoop() {
 		err = c.getAck()
 		if err != nil {
 			log.Errorf("action: receive_ack | result: fail | client_id: %v | batch_size: %d | error: %v", c.config.ID, len(batch), err)
+			c.conn.Close()
+			return err
 		} else {
 			log.Infof("action: apuesta_enviada | result: success | client_id: %v | batch_size: %d", c.config.ID, len(batch))
 		}
@@ -190,13 +160,6 @@ func (c *Client) StartClientLoop() {
 		c.conn.Close()
 		batchCount++
 
-		select {
-		case <-time.After(c.config.LoopPeriod):
-		case <-c.ctx.Done():
-			log.Infof("action: loop_interrupted | result: success | client_id: %v", c.config.ID)
-			return fmt.Errorf("context cancelled")
-		}
-		
 		return nil
 	}
 	
@@ -206,36 +169,33 @@ func (c *Client) StartClientLoop() {
 		return
 	}
 	
-	c.mu.Lock()
-			if c.running {
-			log.Infof("action: loop_finished | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
-			
-			if err := c.createClientSocket(); err != nil {
-				log.Errorf("action: connect_for_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			} else {
-				if err := c.sendFinishNotification(); err != nil {
-					log.Errorf("action: send_finish_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
-				} else {
-					log.Infof("action: finish_notification_sent | result: success | client_id: %v", c.config.ID)
-				}
-				
-				if err := c.getAck(); err != nil {
-					log.Errorf("action: receive_notification_ack | result: fail | client_id: %v | error: %v", c.config.ID, err)
-				} else {
-					log.Infof("action: notification_ack_received | result: success | client_id: %v", c.config.ID)
-				}
-				
-				winnerCount, err := c.getWinnerResponse()
-				if err != nil {
-					log.Errorf("action: receive_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)
-				} else {
-					log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnerCount)
-				}
-				
-				c.conn.Close()
-			}
+	log.Infof("action: loop_finished | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
+	
+	// Send finish notification and get winners
+	if err := c.createClientSocket(); err != nil {
+		log.Errorf("action: connect_for_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
+	} else {
+		if err := c.sendFinishNotification(); err != nil {
+			log.Errorf("action: send_finish_notification | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		} else {
-		log.Infof("action: loop_interrupted | result: success | client_id: %v | batches_sent: %d", c.config.ID, batchCount)
+			log.Infof("action: finish_notification_sent | result: success | client_id: %v", c.config.ID)
+		}
+		
+		if err := c.getAck(); err != nil {
+			log.Errorf("action: receive_notification_ack | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		} else {
+			log.Infof("action: notification_ack_received | result: success | client_id: %v", c.config.ID)
+		}
+		
+		winnerCount, err := c.getWinnerResponse()
+		if err != nil {
+			log.Errorf("action: receive_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		} else {
+			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnerCount)
+		}
+		
+		c.conn.Close()
 	}
-	c.mu.Unlock()
+	
+	os.Exit(0)
 }
