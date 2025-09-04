@@ -1,9 +1,7 @@
 package common
 
 import (
-	"context"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/op/go-logging"
@@ -28,21 +26,13 @@ type ClientConfig struct {
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
-	mu     sync.Mutex
-	running bool
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
 func NewClient(config ClientConfig) *Client {
-	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{
 		config: config,
-		running: true,
-		ctx:    ctx,
-		cancel: cancel,
 	}
 	return client
 }
@@ -64,25 +54,8 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) Stop() {
-	log.Info("action: graceful_shutdown | result: in_progress")
-
-	c.mu.Lock()
-	c.running = false
-	c.mu.Unlock()
-
-	c.cancel()
-
-	c.cleanup()
-
-	log.Info("action: graceful_shutdown | result: success")
-}
-
-func (c *Client) cleanup() {
+func (c *Client) Cleanup() {
 	log.Info("action: cleanup | result: in_progress")
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if c.conn != nil {
 		c.conn.Close()
@@ -105,13 +78,6 @@ func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-		c.mu.Lock()
-		if !c.running {
-			c.mu.Unlock()
-			break
-		}
-		c.mu.Unlock()
-
 		// Create the connection the server in every loop iteration. Send an
 		if err := c.createClientSocket(); err != nil {
 			log.Errorf("action: connect | result: fail | client_id: %v | error: %v", c.config.ID, err)
@@ -133,19 +99,8 @@ func (c *Client) StartClientLoop() {
 		c.conn.Close()
 
 		// Wait a time between sending one message and the next one
-		select {
-		case <-time.After(c.config.LoopPeriod):
-		case <-c.ctx.Done():
-			log.Info("action: loop_interrupted | result: success | client_id: %v", c.config.ID)
-			return
-		}
+		time.Sleep(c.config.LoopPeriod)
 	}
 
-	c.mu.Lock()
-	if c.running {
-		log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
-	} else {
-		log.Info("action: loop_interrupted | result: success | client_id: %v", c.config.ID)
-	}
-	c.mu.Unlock()
+	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
