@@ -225,6 +225,12 @@ func (c *Client) StartClientLoop() {
 					log.Infof("action: notification_ack_received | result: success | client_id: %v", c.config.ID)
 				}
 				
+				if err := c.sendWinnerQuery(); err != nil {
+					log.Errorf("action: send_winner_query | result: fail | client_id: %v | error: %v", c.config.ID, err)
+				} else {
+					log.Infof("action: winner_query_sent | result: success | client_id: %v", c.config.ID)
+				}
+				
 				winnerCount, err := c.getWinnerResponse()
 				if err != nil {
 					log.Errorf("action: receive_winner_response | result: fail | client_id: %v | error: %v", c.config.ID, err)

@@ -17,6 +17,7 @@ class Server:
         self._pending_queries = []
         self._agencies_with_bets = set()
         self._waiting_clients = {}
+        self._winners_by_agency = {}
         
         self._thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="client_handler")
         self._lock = threading.Lock()
@@ -100,6 +101,9 @@ class Server:
             elif msg_type == MSG_TYPE_FINISH_NOTIFICATION:
                 self.__handle_finish_notification(client_sock, payload)
                 return
+            elif msg_type == MSG_TYPE_WINNER_QUERY:
+                self.__handle_winner_query(client_sock, payload)
+                return
             else:
                 logging.error(f"action: receive_message | result: fail | error: unexpected message type {msg_type}")
                 return
@@ -107,7 +111,7 @@ class Server:
         except OSError as e:
             logging.error(f"action: handle_connection | result: fail | error: {e}")
         finally:
-            if msg_type != MSG_TYPE_FINISH_NOTIFICATION:
+            if msg_type not in [MSG_TYPE_FINISH_NOTIFICATION, MSG_TYPE_WINNER_QUERY]:
                 client_sock.close()
 
     def __handle_bet_message(self, client_sock, payload):
@@ -171,18 +175,17 @@ class Server:
             
             if should_perform_sorteo:
                 logging.info('action: sorteo | result: success')
-                self.__send_winners_to_all_waiting_clients()
+                self.__calculate_winners()
             
         except Exception as e:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
             send_ack(client_sock, success=False, error_msg=f"Failed to process notification: {e}")
 
-    def __send_winners_to_all_waiting_clients(self):
-        logging.info('action: send_winners_to_all_waiting_clients | result: in_progress')
+    def __calculate_winners(self):
+        logging.info('action: calculate_winners | result: in_progress')
         
         try:
             all_bets = load_bets()
-
             winners_by_agency = {}
             for bet in all_bets:
                 if has_won(bet):
@@ -192,11 +195,25 @@ class Server:
                     winners_by_agency[agency_id].append(bet.document)
 
             with self._lock:
-                waiting_clients_copy = self._waiting_clients.copy()
-                self._waiting_clients.clear()
+                self._winners_by_agency = winners_by_agency
+            
+            logging.info('action: calculate_winners | result: success')
+            
+        except Exception as e:
+            logging.error('action: calculate_winners | result: fail | error: {e}')
 
-            for agency_id, client_sock in waiting_clients_copy.items():
-                winner_count = len(winners_by_agency.get(agency_id, []))
+    def __handle_winner_query(self, client_sock, payload):
+        try:
+            agency_id = payload.decode('utf-8')
+            logging.info(f'action: winner_query_received | result: success | agency: {agency_id}')
+            
+            with self._lock:
+                if not self._sorteo_realizado:
+                    logging.warning(f'action: winner_query | result: fail | agency: {agency_id} | reason: sorteo_not_finishd')
+                    send_ack(client_sock, success=False, error_msg="Sorteo no realizado aún")
+                    return
+                
+                winner_count = len(self._winners_by_agency.get(agency_id, []))
                 logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {winner_count}')
                 
                 if not send_winner_response(client_sock, winner_count):
@@ -204,11 +221,9 @@ class Server:
                 else:
                     logging.info(f"action: send_winner_response | result: success | agency: {agency_id}")
             
-            logging.info('action: send_winners_to_all_waiting_clients | result: success')
-            
         except Exception as e:
-            logging.error(f'action: send_winners_to_all_waiting_clients | result: fail | error: {e}')
-
+            logging.error(f'action: winner_query | result: fail | error: {e}')
+            send_ack(client_sock, success=False, error_msg=f"Failed to process winner query: {e}")
 
     def __accept_new_connection(self):
         """
