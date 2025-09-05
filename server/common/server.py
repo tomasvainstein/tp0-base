@@ -87,6 +87,7 @@ class Server:
             client_sock.close()
             return
             
+        msg_type = None
         try:
             # leer mensaje del cliente
             message = read_message(client_sock)
