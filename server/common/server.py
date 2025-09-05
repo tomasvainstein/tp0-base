@@ -100,8 +100,6 @@ class Server:
             elif msg_type == MSG_TYPE_FINISH_NOTIFICATION:
                 self.__handle_finish_notification(client_sock, payload)
                 return
-            elif msg_type == MSG_TYPE_WINNER_QUERY:
-                self.__handle_winner_query(client_sock, payload)
             else:
                 logging.error(f"action: receive_message | result: fail | error: unexpected message type {msg_type}")
                 return
@@ -211,47 +209,6 @@ class Server:
         except Exception as e:
             logging.error(f'action: send_winners_to_all_waiting_clients | result: fail | error: {e}')
 
-    def __handle_winner_query(self, client_sock, payload):
-
-        try:
-            agency_id = payload.decode('utf-8')
-
-            with self._lock:
-                sorteo_realizado = self._sorteo_realizado
-            
-            if not sorteo_realizado:
-                logging.info(f'action: winner_query | result: in_progress | agency: {agency_id} | reason: sorteo not performed yet')
-                send_winner_response(client_sock, 0)
-                return
-
-            self.__process_winner_query(client_sock, agency_id)
-            
-        except Exception as e:
-            logging.error(f'action: winner_query | result: fail | error: {e}')
-            send_winner_response(client_sock, 0)
-
-    def __process_winner_query(self, client_sock, agency_id):
-        try:
-            try:
-                all_bets = load_bets()
-                agency_bets = [bet for bet in all_bets if str(bet.agency) == agency_id]
-            except FileNotFoundError:
-                agency_bets = []
-
-            winners = [bet for bet in agency_bets if has_won(bet)]
-            winner_count = len(winners)
-
-            logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {winner_count}')
-            
-            if not send_winner_response(client_sock, winner_count):
-                logging.error("action: send_winner_response | result: fail | error: could not send response")
-                return
-            
-            logging.info("action: send_winner_response | result: success")
-            
-        except Exception as e:
-            logging.error(f'action: winner_query | result: fail | error: {e}')
-            send_winner_response(client_sock, 0)
 
     def __accept_new_connection(self):
         """
