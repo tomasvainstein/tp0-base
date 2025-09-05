@@ -101,6 +101,19 @@ class Server:
                 self.__handle_bet_message(client_sock, payload)
             elif msg_type == MSG_TYPE_FINISH_NOTIFICATION:
                 self.__handle_finish_notification(client_sock, payload)
+                try:
+                    message = read_message(client_sock)
+                    if message is None:
+                        logging.error("action: receive_winner_query | result: fail | error: could not read winner query")
+                        return
+                    
+                    msg_type, payload = message
+                    if msg_type == MSG_TYPE_WINNER_QUERY:
+                        self.__handle_winner_query(client_sock, payload)
+                    else:
+                        logging.error(f"action: receive_winner_query | result: fail | error: expected winner query, got {msg_type}")
+                except Exception as e:
+                    logging.error(f"action: receive_winner_query | result: fail | error: {e}")
                 return
             elif msg_type == MSG_TYPE_WINNER_QUERY:
                 self.__handle_winner_query(client_sock, payload)
@@ -210,7 +223,7 @@ class Server:
             
             with self._lock:
                 if not self._sorteo_realizado:
-                    logging.warning(f'action: winner_query | result: fail | agency: {agency_id} | reason: sorteo_not_finishd')
+                    logging.warning(f'action: winner_query | result: fail | agency: {agency_id} | reason: sorteo_not_done')
                     send_ack(client_sock, success=False, error_msg="Sorteo no realizado aún")
                     return
                 
