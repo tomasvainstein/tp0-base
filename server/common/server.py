@@ -150,7 +150,7 @@ class Server:
         logging.info('action: send_winners_to_all_waiting_clients | result: in_progress')
         
         try:
-            all_bets = list(load_bets())
+            all_bets = load_bets()
 
             winners_by_agency = {}
             for bet in all_bets:
@@ -194,7 +194,7 @@ class Server:
     def __process_winner_query(self, client_sock, agency_id):
         try:
             try:
-                all_bets = list(load_bets())
+                all_bets = load_bets()
                 agency_bets = [bet for bet in all_bets if str(bet.agency) == agency_id]
             except FileNotFoundError:
                 agency_bets = []
