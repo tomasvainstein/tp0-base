@@ -18,7 +18,6 @@ class Server:
         self._agencies_with_bets = set()
         self._waiting_clients = {}
         self._winners_by_agency = {}
-        self._pending_winner_queries = {}
         
         self._thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="client_handler")
         self._lock = threading.Lock()
@@ -102,6 +101,19 @@ class Server:
                 self.__handle_bet_message(client_sock, payload)
             elif msg_type == MSG_TYPE_FINISH_NOTIFICATION:
                 self.__handle_finish_notification(client_sock, payload)
+                try:
+                    message = read_message(client_sock)
+                    if message is None:
+                        logging.error("action: receive_winner_query | result: fail | error: could not read winner query")
+                        return
+                    
+                    msg_type, payload = message
+                    if msg_type == MSG_TYPE_WINNER_QUERY:
+                        self.__handle_winner_query(client_sock, payload)
+                    else:
+                        logging.error(f"action: receive_winner_query | result: fail | error: expected winner query, got {msg_type}")
+                except Exception as e:
+                    logging.error(f"action: receive_winner_query | result: fail | error: {e}")
                 return
             elif msg_type == MSG_TYPE_WINNER_QUERY:
                 self.__handle_winner_query(client_sock, payload)
@@ -178,7 +190,6 @@ class Server:
             if should_perform_sorteo:
                 logging.info('action: sorteo | result: success')
                 self.__calculate_winners()
-                self.__respond_to_pending_winner_queries()
             
         except Exception as e:
             logging.error(f'action: finish_notification | result: fail | error: {e}')
@@ -205,29 +216,6 @@ class Server:
         except Exception as e:
             logging.error('action: calculate_winners | result: fail | error: {e}')
 
-    def __respond_to_pending_winner_queries(self):
-        
-        try:
-            with self._lock:
-                pending_queries_copy = self._pending_winner_queries.copy()
-                self._pending_winner_queries.clear()
-            
-            for agency_id, client_sock in pending_queries_copy.items():
-                winner_count = len(self._winners_by_agency.get(agency_id, []))
-                logging.info(f'action: winner_query | result: success | agency: {agency_id} | winners: {winner_count}')
-                
-                if not send_winner_response(client_sock, winner_count):
-                    logging.error(f"action: send_winner_response | result: fail | error: could not send response to agency {agency_id}")
-                else:
-                    logging.info(f"action: send_winner_response | result: success | agency: {agency_id}")
-                
-                client_sock.close()
-            
-            logging.info('action: respond_to_pending_winner_queries | result: success')
-            
-        except Exception as e:
-            logging.error(f'action: respond_to_pending_winner_queries | result: fail | error: {e}')
-
     def __handle_winner_query(self, client_sock, payload):
         try:
             agency_id = payload.decode('utf-8')
@@ -235,8 +223,8 @@ class Server:
             
             with self._lock:
                 if not self._sorteo_realizado:
-                    logging.info(f'action: winner_query | result: pending | agency: {agency_id} | reason: waiting_for_all_agencies')
-                    self._pending_winner_queries[agency_id] = client_sock
+                    logging.warning(f'action: winner_query | result: fail | agency: {agency_id} | reason: sorteo_not_done')
+                    send_ack(client_sock, success=False, error_msg="Sorteo no realizado aún")
                     return
                 
                 winner_count = len(self._winners_by_agency.get(agency_id, []))
